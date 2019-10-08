@@ -1,8 +1,9 @@
 #include <unistd.h>     // fork()
 #include <sys/wait.h>   // waitpid()
 #include <stdio.h>      // printf(), fgets()
-#include <string.h>     // strtok(), strcmp(), strcpy()
+#include <string.h>     // strtok(), strcmp(), strdup()
 #include <stdlib.h>     // free()
+#include <fcntl.h>      // open(), close()
 using namespace std;
 const int MAX_LINE_LENGTH = 200;
 const int BUF_SIZE = 100;
@@ -34,9 +35,12 @@ char **parse_command(char *input, int *wait) {
    return argv;
 }
 
-int parse_redirect(char** argv, char* file_name) {
+char **parse_redirect(char** argv) {
    unsigned idx = 0;
-   int redirect_type = 0;
+   char *redirect_type = NULL, *file_name = NULL;
+
+   // Allocate new array for redirect arguments
+   char **redirect_argv = (char **)malloc(2 * sizeof(char *));
 
    while (argv[idx] != NULL) {
 
@@ -46,12 +50,10 @@ int parse_redirect(char** argv, char* file_name) {
          // Check for succeeded file name
          if (argv[idx + 1] != NULL) {
 
-            // 1: read from file, -1: write to file
-            redirect_type = (strcmp(argv[idx], "<") ? 1 : -1);
-            argv[idx] = NULL;
-
-            // Move file name to a new variable 
+            // Move redirect type and file name to new variables
+            redirect_type = strdup(argv[idx]);
             file_name = strdup(argv[idx + 1]);
+            argv[idx] = NULL;
             argv[idx + 1] = NULL;
          }
       }
@@ -59,23 +61,64 @@ int parse_redirect(char** argv, char* file_name) {
       idx++;
    }
 
-   return redirect_type;
+   // Point redirect arguments to redirect type and file name
+   redirect_argv[0] = redirect_type;
+   redirect_argv[1] = file_name;
+   return redirect_argv;
 }
 
 
-void child(char** argv) {
+void child(char** argv, char** redirect_argv) {
+   int fd_out, fd_in;
+
+   // Redirect output
+   
+   if (strcmp(redirect_argv[0], ">") == 0) {
+
+      // Get file description, set flags to write and create if it doesn't exist
+      fd_out = creat(redirect_argv[1], S_IRWXU);
+      if (fd_out == -1) {
+         perror("Redirect output failed");
+      }
+
+      // Replace stdout with output to file
+      dup2(fd_out, STDOUT_FILENO);
+
+      // Check for error on close
+      if (close(fd_out) == -1) {
+         perror("Closing output failed");
+      }
+   }
+
+   // Redirect input
+   else if (strcmp(redirect_argv[0], "<") == 0) {
+      
+      // Get file description, set flag to read
+      fd_in = open(redirect_argv[1], O_RDONLY);
+      if (fd_in == -1) {
+         perror("Redirect input failed");
+      }
+
+      // Replace stdin with input from file
+      dup2(fd_in, STDIN_FILENO);
+
+      // Check for error on close
+      if (close(fd_in) == -1) {
+         perror("Closing input failed");
+      }
+   }
 
    // Execute user command in child process
    if (execvp(argv[0], argv) == -1) {
-      perror("Cannot execute command.");
+      perror("Fail to execute command");
    }
 }
 
-void parent(pid_t child_pid, int *suspend) {
+void parent(pid_t child_pid, int wait) {
    int status;
    printf("Parent <%d> spawned a child <%d>.\n", getpid(), child_pid);
 
-   switch (*suspend) {
+   switch (wait) {
 
       // Parent and child are running concurrently
       case 0: {
@@ -96,11 +139,10 @@ void parent(pid_t child_pid, int *suspend) {
 
 int main() {
    bool running = true;
-   pid_t pid, w_pid;
-   int status = 0, wait, redirect_type;
-   char **argv;
+   pid_t pid;
+   int status = 0, wait;
+   char **argv, **redirect_argv;
    char *user_input;
-   char *scr_file;
 
    while (running) {
       printf("osh>");
@@ -122,7 +164,7 @@ int main() {
       }
 
       argv = parse_command(user_input, &wait);   
-      redirect_type = parse_redirect(argv, scr_file);
+      redirect_argv = parse_redirect(argv);
 
       // Fork child process
       pid_t pid = fork();
@@ -134,11 +176,11 @@ int main() {
             exit(EXIT_FAILURE);
       
          case 0:     // In child process
-            child(argv);
+            child(argv, redirect_argv);
             exit(EXIT_SUCCESS);
       
          default:    // In parent process
-            parent(pid, &wait);
+            parent(pid, wait);
             free(argv);
       }
    }
