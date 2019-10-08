@@ -14,8 +14,14 @@ char **parse(char *input, int *wait) {
    // Remove trailing endline character
    input[strcspn(input, "\n")] = '\0';
 
-   // Check if the last character is &
-   *wait = (input[strlen(input) - 1] == '&' ? 1 : 0);
+   // Check for trailing & and remove if exists
+   if (input[strlen(input) - 1] == '&') {
+      *wait = 1;
+      input[strlen(input) - 1] = '\0';
+   }
+   else {
+      *wait = 0;
+   }
 
    // Perform tokenization on input string
    const char *delim = " ";
@@ -32,17 +38,27 @@ char **parse(char *input, int *wait) {
 }
 
 void child(char** argv) {
+   // Execute user commend in child process
    if (execvp(argv[0], argv) == -1) {
       perror("Cannot execute command.");
    }
 }
 
-void parent() {
+void parent(pid_t child_pid, int *suspend) {
    int status;
-   wait(&status);
+   printf("Parent <%d> spawned a child <%d>.\n", getpid(), child_pid);
 
-   if (WIFEXITED(status)) {
-      printf("Child process exited with status %d.", status);
+   switch (*suspend) {
+      case 0:     // Parent and child are running concurrently
+         waitpid(child_pid, &status, 0);
+         break;
+      
+      default:    // Parent waits for child process with PID to be terminated
+         waitpid(child_pid, &status, WUNTRACED);
+         if (WIFEXITED(status)) {   
+            printf("Child <%d> exited with status = %d.\n", child_pid, status);
+         }
+         break;
    }
 }
 
@@ -77,16 +93,14 @@ int main() {
       
          case 0:     // In child process
             child(argv);
-            exit(EXIT_FAILURE);
+            exit(EXIT_SUCCESS);
       
          default:    // In parent process
-            parent();
-            exit(EXIT_FAILURE);
+            parent(pid, &wait);
+            free(argv);
       }
-
-      free(user_input);
-      free(argv);
    }
 
+   free(user_input);
    return 0;
 }
