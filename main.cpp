@@ -38,7 +38,7 @@ char **parse(char *input, int *wait) {
 }
 
 void child(char** argv) {
-   // Execute user commend in child process
+   // Execute user command in child process
    if (execvp(argv[0], argv) == -1) {
       perror("Cannot execute command.");
    }
@@ -84,8 +84,7 @@ int main() {
       // Fork child process
       pid_t pid = fork();
 
-      // Fork return twice on success
-      // (0 - child process, > 0 - parent process)
+      // Fork return twice on success: 0 - child process, > 0 - parent process
       switch (pid) {
          case -1:
             perror("fork() failed!");
