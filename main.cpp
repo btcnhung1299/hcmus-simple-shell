@@ -1,49 +1,91 @@
 #include <unistd.h>     // fork()
+#include <sys/wait.h>   // waitpid()
 #include <stdio.h>      // printf(), fgets()
 #include <string.h>     // strtok()
+#include <stdlib.h>     // free()
 using namespace std;
-const int BUF_SIZE = 80;
+const int MAX_LINE_LENGTH = 200;
+const int BUF_SIZE = 100;
 
-void parse(char *input, char **argv) {
+char **parse(char *input, int *wait) {
+   // Allocate new array for arguments
+   char **argv = (char **)malloc(BUF_SIZE * sizeof(char *));
+
    // Remove trailing endline character
    input[strcspn(input, "\n")] = '\0';
 
+   // Check if the last character is &
+   *wait = (input[strlen(input) - 1] == '&' ? 1 : 0);
+
+   // Perform tokenization on input string
    const char *delim = " ";
    unsigned idx = 0;
 
    char *token = strtok(input, delim);
-   while (token != nullptr) {
+   while (token != NULL) {
       argv[idx++] = token;
-      token = strtok(nullptr, delim);
+      token = strtok(NULL, delim);
    }
+   argv[idx] = NULL;
 
-   argv[idx] = nullptr;
+   return argv;
+}
+
+void child(char** argv) {
+   if (execvp(argv[0], argv) == -1) {
+      perror("Cannot execute command.");
+   }
+}
+
+void parent() {
+   int status;
+   wait(&status);
+
+   if (WIFEXITED(status)) {
+      printf("Child process exited with status %d.", status);
+   }
 }
 
 int main() {
-   bool end_process = false;
-   char *argv[BUF_SIZE];
+   bool running = true;
+   pid_t pid, w_pid;
+   int status = 0, wait;
+   char **argv;
    char *user_input;
-   pid_t pid;
 
-   while (!end_process) {
+   while (running) {
       printf("osh>");
       fflush(stdout);
-
-      if (fgets(user_input, BUF_SIZE, stdin) == NULL) {
+      
+      // Read and parse user input
+      while (fgets(user_input, MAX_LINE_LENGTH, stdin) == NULL) {
          perror("Cannot read user input!");
+         fflush(stdin);
       }
-      parse(user_input, argv);
+
+      argv = parse(user_input, &wait);   
       
       // Fork child process
       pid_t pid = fork();
-      if (pid < 0) {
-         perror("fork() failed!");
-         exit(1);
+
+      // Fork return twice on success
+      // (0 - child process, > 0 - parent process)
+      switch (pid) {
+         case -1:
+            perror("fork() failed!");
+            exit(EXIT_FAILURE);
+      
+         case 0:     // In child process
+            child(argv);
+            exit(EXIT_FAILURE);
+      
+         default:    // In parent process
+            parent();
+            exit(EXIT_FAILURE);
       }
-      else if (pid == 0) {
-         execvp(argv[0], argv);
-      }
+
+      free(user_input);
+      free(argv);
    }
 
    return 0;
