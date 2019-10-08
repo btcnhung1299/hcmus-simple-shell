@@ -1,18 +1,15 @@
 #include <unistd.h>     // fork()
 #include <sys/wait.h>   // waitpid()
 #include <stdio.h>      // printf(), fgets()
-#include <string.h>     // strtok()
+#include <string.h>     // strtok(), strcmp(), strcpy()
 #include <stdlib.h>     // free()
 using namespace std;
 const int MAX_LINE_LENGTH = 200;
 const int BUF_SIZE = 100;
 
-char **parse(char *input, int *wait) {
+char **parse_command(char *input, int *wait) {
    // Allocate new array for arguments
    char **argv = (char **)malloc(BUF_SIZE * sizeof(char *));
-
-   // Remove trailing endline character
-   input[strcspn(input, "\n")] = '\0';
 
    // Check for trailing & and remove if exists
    if (input[strlen(input) - 1] == '&') {
@@ -37,7 +34,37 @@ char **parse(char *input, int *wait) {
    return argv;
 }
 
+int parse_redirect(char** argv, char* file_name) {
+   unsigned idx = 0;
+   int redirect_type = 0;
+
+   while (argv[idx] != NULL) {
+
+      // Check if user_command contains character <, >
+      if (strcmp(argv[idx], "<") == 0 || strcmp(argv[idx], ">") == 0) {
+
+         // Check for succeeded file name
+         if (argv[idx + 1] != NULL) {
+
+            // 1: read from file, -1: write to file
+            redirect_type = (strcmp(argv[idx], "<") ? 1 : -1);
+            argv[idx] = NULL;
+
+            // Move file name to a new variable 
+            file_name = strdup(argv[idx + 1]);
+            argv[idx + 1] = NULL;
+         }
+      }
+
+      idx++;
+   }
+
+   return redirect_type;
+}
+
+
 void child(char** argv) {
+
    // Execute user command in child process
    if (execvp(argv[0], argv) == -1) {
       perror("Cannot execute command.");
@@ -49,25 +76,31 @@ void parent(pid_t child_pid, int *suspend) {
    printf("Parent <%d> spawned a child <%d>.\n", getpid(), child_pid);
 
    switch (*suspend) {
-      case 0:     // Parent and child are running concurrently
+
+      // Parent and child are running concurrently
+      case 0: {
          waitpid(child_pid, &status, 0);
          break;
-      
-      default:    // Parent waits for child process with PID to be terminated
+      }
+
+      // Parent waits for child process with PID to be terminated
+      default: {
          waitpid(child_pid, &status, WUNTRACED);
          if (WIFEXITED(status)) {   
             printf("Child <%d> exited with status = %d.\n", child_pid, status);
          }
          break;
+      }
    }
 }
 
 int main() {
    bool running = true;
    pid_t pid, w_pid;
-   int status = 0, wait;
+   int status = 0, wait, redirect_type;
    char **argv;
    char *user_input;
+   char *scr_file;
 
    while (running) {
       printf("osh>");
@@ -79,8 +112,18 @@ int main() {
          fflush(stdin);
       }
 
-      argv = parse(user_input, &wait);   
-      
+      // Remove trailing endline character
+      user_input[strcspn(user_input, "\n")] = '\0';
+
+      // Check if user entered "exit"
+      if (strcmp(user_input, "exit") == 0) {
+         running = false;
+         continue;
+      }
+
+      argv = parse_command(user_input, &wait);   
+      redirect_type = parse_redirect(argv, scr_file);
+
       // Fork child process
       pid_t pid = fork();
 
@@ -99,7 +142,6 @@ int main() {
             free(argv);
       }
    }
-
-   free(user_input);
+   
    return 0;
 }
