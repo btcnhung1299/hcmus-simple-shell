@@ -9,7 +9,6 @@ using namespace std;
 const unsigned MAX_LINE_LENGTH = 100;
 const unsigned BUF_SIZE = 50;
 const unsigned REDIR_SIZE = 2;
-const unsigned MAX_COMMAND_NAME = 20;
 const unsigned MAX_HISTORY = 30;
 
 void parse_command(char input[], char* argv[], int* wait) {
@@ -42,6 +41,8 @@ void parse_command(char input[], char* argv[], int* wait) {
 
 void parse_redir(char* argv[], char* redir_argv[]) {
    unsigned idx = 0;
+	redir_argv[0] = NULL;
+	redir_argv[1] = NULL;
 
    while (argv[idx] != NULL) {
 
@@ -64,9 +65,9 @@ void parse_redir(char* argv[], char* redir_argv[]) {
 }
 
 
-void child(char** argv, char** redir_argv) {
-   int fd_out, fd_in; 
-   printf("%s\n", redir_argv[0]);
+void child(char* argv[], char* redir_argv[]) {
+   int fd_out, fd_in;
+
    if (redir_argv[0] != NULL) {
          
       // Redirect output
