@@ -100,9 +100,8 @@ void child(char** argv, char** redirect_argv) {
 
       // Redirect input
       else if (strcmp(redirect_argv[0], "<") == 0) {
-         printf("Redirect input!\n");      
 
-         // Get file description, set flag to read
+         // Get file description
          fd_in = open(redirect_argv[1], O_RDONLY);
          if (fd_in == -1) {
             perror("Redirect input failed");
@@ -115,6 +114,8 @@ void child(char** argv, char** redirect_argv) {
          if (close(fd_in) == -1) {
             perror("Closing input failed");
          }
+
+         free(redirect_argv);
       }
    }
 
