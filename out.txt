@@ -1,6 +1,0 @@
-Here!
-main.cpp
-out.txt
-README.md
-statement.pdf
-test

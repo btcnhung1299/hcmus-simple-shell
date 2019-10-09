@@ -3,7 +3,7 @@
 #include <stdio.h>      // printf(), fgets()
 #include <string.h>     // strtok(), strcmp(), strdup()
 #include <stdlib.h>     // free()
-#include <fcntl.h>      // open(), close()
+#include <fcntl.h>      // open(), creat(), close()
 
 using namespace std;
 const int MAX_LINE_LENGTH = 200;
@@ -12,6 +12,7 @@ const int MAX_COMMAND_NAME = 20;
 const int MAX_HISTORY = 30;
 
 char **parse_command(char *input, int *wait) {
+
    // Allocate new array for arguments
    char **argv = (char **)malloc(BUF_SIZE * sizeof(char *));
 
@@ -72,46 +73,50 @@ char **parse_redirect(char** argv) {
 
 
 void child(char** argv, char** redirect_argv) {
-   int fd_out, fd_in;
+   int fd_out, fd_in; 
+   
+   if (redirect_argv[0] != NULL) {
+         
+      // Redirect output
+      if (strcmp(redirect_argv[0], ">") == 0) {
 
-   // Redirect output
-/*   
-   if (strcmp(redirect_argv[0], ">") == 0) {
-      printf("Redirect output!\n");
+         // Get file description
+         fd_out = creat(redirect_argv[1], S_IRWXU);
+         if (fd_out == -1) {
+            perror("Redirect output failed");
+         }
 
-      // Get file description, set flags to write and create if it doesn't exist
-      fd_out = creat(redirect_argv[1], S_IRWXU);
-      if (fd_out == -1) {
-         perror("Redirect output failed");
+         // Replace stdout with output file
+         dup2(fd_out, STDOUT_FILENO);
+
+         // Check for error on close
+         if (close(fd_out) == -1) {
+            perror("Closing output failed");
+         }
+      
+         free(redirect_argv);
+
       }
 
-      // Replace stdout with output to file
-      dup2(fd_out, STDOUT_FILENO);
+      // Redirect input
+      else if (strcmp(redirect_argv[0], "<") == 0) {
+         printf("Redirect input!\n");      
 
-      // Check for error on close
-      if (close(fd_out) == -1) {
-         perror("Closing output failed");
+         // Get file description, set flag to read
+         fd_in = open(redirect_argv[1], O_RDONLY);
+         if (fd_in == -1) {
+            perror("Redirect input failed");
+         }
+
+         // Replace stdin with input from file
+         dup2(fd_in, STDIN_FILENO);
+
+         // Check for error on close
+         if (close(fd_in) == -1) {
+            perror("Closing input failed");
+         }
       }
    }
-
-   // Redirect input
-   else if (strcmp(redirect_argv[0], "<") == 0) {
-      printf("Redirect input!\n");      
-
-      // Get file description, set flag to read
-      fd_in = open(redirect_argv[1], O_RDONLY);
-      if (fd_in == -1) {
-         perror("Redirect input failed");
-      }
-
-      // Replace stdin with input from file
-      dup2(fd_in, STDIN_FILENO);
-
-      // Check for error on close
-      if (close(fd_in) == -1) {
-         perror("Closing input failed");
-      }
-   }*/
 
    // Execute user command in child process
    if (execvp(argv[0], argv) == -1) {
@@ -119,11 +124,11 @@ void child(char** argv, char** redirect_argv) {
    }
 }
 
+
 void parent(pid_t child_pid, int wait) {
    int status;
    printf("Parent <%d> spawned a child <%d>.\n", getpid(), child_pid);
-   printf("Wait = %d\n", wait);
-
+   
    switch (wait) {
 
       // Parent and child are running concurrently
@@ -142,6 +147,7 @@ void parent(pid_t child_pid, int wait) {
       }
    }
 }
+
 void add_history_feature(char *history[], int &history_count, char* user_input)
 {
    // If history_count exceeds MAX_HISTORY
@@ -160,13 +166,13 @@ void add_history_feature(char *history[], int &history_count, char* user_input)
       history[MAX_HISTORY - 1] = strdup(user_input);
    }
 }
+
 int main() {
    bool running = true;
    pid_t pid;
    int status = 0, wait;
    char **argv, **redirect_argv;
    char *user_input;
-   char *scr_file;
    char *history[MAX_HISTORY];
    int history_count = 0;
 
@@ -183,6 +189,7 @@ int main() {
 
       // Remove trailing endline character
       user_input[strcspn(user_input, "\n")] = '\0';
+
 
       // Check if user entered "exit"
       if (strcmp(user_input, "exit") == 0) {
@@ -203,7 +210,6 @@ int main() {
       add_history_feature(history, history_count, user_input);
       argv = parse_command(user_input, &wait);   
       redirect_argv = parse_redirect(argv);
-
       
       // Fork child process
       pid_t pid = fork();
