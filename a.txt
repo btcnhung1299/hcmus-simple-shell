@@ -1,8 +1,0 @@
-a.txt
-input.in
-main.cpp
-out.txt
-prog.c
-README.md
-statement.pdf
-test
