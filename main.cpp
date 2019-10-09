@@ -72,8 +72,9 @@ void child(char** argv, char** redirect_argv) {
    int fd_out, fd_in;
 
    // Redirect output
-   
+/*   
    if (strcmp(redirect_argv[0], ">") == 0) {
+      printf("Redirect output!\n");
 
       // Get file description, set flags to write and create if it doesn't exist
       fd_out = creat(redirect_argv[1], S_IRWXU);
@@ -92,7 +93,8 @@ void child(char** argv, char** redirect_argv) {
 
    // Redirect input
    else if (strcmp(redirect_argv[0], "<") == 0) {
-      
+      printf("Redirect input!\n");      
+
       // Get file description, set flag to read
       fd_in = open(redirect_argv[1], O_RDONLY);
       if (fd_in == -1) {
@@ -106,7 +108,7 @@ void child(char** argv, char** redirect_argv) {
       if (close(fd_in) == -1) {
          perror("Closing input failed");
       }
-   }
+   }*/
 
    // Execute user command in child process
    if (execvp(argv[0], argv) == -1) {
@@ -117,6 +119,7 @@ void child(char** argv, char** redirect_argv) {
 void parent(pid_t child_pid, int wait) {
    int status;
    printf("Parent <%d> spawned a child <%d>.\n", getpid(), child_pid);
+   printf("Wait = %d\n", wait);
 
    switch (wait) {
 
