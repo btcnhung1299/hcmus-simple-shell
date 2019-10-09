@@ -9,6 +9,7 @@ using namespace std;
 const unsigned MAX_LINE_LENGTH = 100;
 const unsigned BUF_SIZE = 50;
 const unsigned REDIR_SIZE = 2;
+const unsigned PIPE_SIZE = 3;
 const unsigned MAX_HISTORY = 30;
 const unsigned MAX_COMMAND_NAME = 30;
 
@@ -153,14 +154,94 @@ void add_history_feature(char *history[], int &history_count, char* user_input) 
       strcpy(history[MAX_HISTORY - 1], user_input);
    }
 }
+bool contain_pipe_character(char** argv, char *child01_argv[], char *child02_argv[]){
+   unsigned idx = 0;
+   int flag_pipe = 0;
+   int split = -1;
+   int cnt = 0;
 
+   while (argv[idx] != NULL){
+
+      // Check if user_command contains pipe character |
+      if (strcmp(argv[idx], "|") == 0){
+         split = idx;
+         flag_pipe = true;
+      }
+      idx++;
+   }
+
+   if (flag_pipe)
+   {
+      for (idx = 0; idx < split; idx++)
+         child01_argv[idx] = argv[idx];
+
+      idx = split + 1;
+      
+      while (argv[idx] != NULL)
+      {
+         child02_argv[cnt++] = argv[idx++];
+      }
+   }
+   
+   child01_argv[split] = NULL;
+   child02_argv[cnt] = NULL;
+
+   return flag_pipe;
+}
+void execWithPipe(char* child01_argv[], char* child02_argv[])
+{
+	int pipefd[2];
+
+	if (pipe(pipefd) == -1)
+	{  
+      /* Create a pipe with 1 input and 1 output file descriptor
+       Notation: Index = 0 ==> read pipe, Index = 1 ==> write pipe
+      */
+		perror("pipe() failed");
+		return;
+	}
+
+   // Create 1st child   
+	if (fork() == 0)         
+	{
+      // Redirect STDOUT to output part of pipe 
+		dup2(pipefd[1], STDOUT_FILENO);       
+		close(pipefd[0]);     
+		close(pipefd[1]);      
+
+		execvp(child01_argv[0], child01_argv);   
+		perror("Fail to execute first command");
+		exit(1);
+	}
+
+   // Create 2nd child
+	if (fork() == 0)   
+	{
+      // Redirect STDIN to input part of pipe
+		dup2(pipefd[0], STDIN_FILENO);            
+		close(pipefd[1]);      
+		close(pipefd[0]);       
+
+		execvp(child02_argv[0], child02_argv);   
+		perror("Fail to execute second command");
+		exit(1);
+	}
+
+	close(pipefd[0]);
+	close(pipefd[1]);
+   // Wait for child 1
+	wait(0);   
+   // Wait for child 2
+	wait(0);   
+}
 
 int main() {
    bool running = true;
    pid_t pid;
    int status = 0, history_count = 0, wait;
    char user_input[MAX_LINE_LENGTH];
-   char *argv[BUF_SIZE], *redir_argv[REDIR_SIZE], *history[MAX_HISTORY];
+   char *argv[BUF_SIZE], *redir_argv[REDIR_SIZE], *child01_argv[PIPE_SIZE], 
+   *child02_argv[PIPE_SIZE], *history[MAX_HISTORY];
 
    for (int i = 0; i < MAX_HISTORY; i++)
 		history[i] = (char*)malloc(MAX_COMMAND_NAME);
@@ -199,7 +280,13 @@ int main() {
       parse_command(user_input, argv, &wait);
 		parse_redir(argv, redir_argv);
       
-      // Fork child process
+      if (contain_pipe_character(argv, child01_argv, child02_argv))
+      {
+         execWithPipe(child01_argv, child02_argv);
+      }
+      else
+      {
+         // Fork child process
       pid_t pid = fork();
 
       // Fork return twice on success: 0 - child process, > 0 - parent process
@@ -214,8 +301,9 @@ int main() {
       
          default:    // In parent process
             parent(pid, wait);
+         }
       }
+      
    }
-   
    return 0;
 }
