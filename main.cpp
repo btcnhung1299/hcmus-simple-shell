@@ -6,15 +6,16 @@
 #include <fcntl.h>      // open(), creat(), close()
 
 using namespace std;
-const int MAX_LINE_LENGTH = 200;
-const int BUF_SIZE = 100;
-const int MAX_COMMAND_NAME = 20;
-const int MAX_HISTORY = 30;
+const unsigned MAX_LINE_LENGTH = 100;
+const unsigned BUF_SIZE = 50;
+const unsigned REDIR_SIZE = 2;
+const unsigned MAX_COMMAND_NAME = 20;
+const unsigned MAX_HISTORY = 30;
 
-char **parse_command(char *input, int *wait) {
-
-   // Allocate new array for arguments
-   char **argv = (char **)malloc(BUF_SIZE * sizeof(char *));
+void parse_command(char input[], char* argv[], int* wait) {
+	for (unsigned idx = 0; idx < BUF_SIZE; idx++) {
+		argv[idx] = NULL;
+	}
 
    // Check for trailing & and remove if exists
    if (input[strlen(input) - 1] == '&') {
@@ -34,29 +35,25 @@ char **parse_command(char *input, int *wait) {
       argv[idx++] = token;
       token = strtok(NULL, delim);
    }
+
    argv[idx] = NULL;
 
-   return argv;
 }
 
-char **parse_redirect(char** argv) {
+void parse_redir(char* argv[], char* redir_argv[]) {
    unsigned idx = 0;
-   char *redirect_type = NULL, *file_name = NULL;
-
-   // Allocate new array for redirect arguments
-   char **redirect_argv = (char **)malloc(2 * sizeof(char *));
 
    while (argv[idx] != NULL) {
 
-      // Check if user_command contains character <, >
+      // Check if command contains character <, >
       if (strcmp(argv[idx], "<") == 0 || strcmp(argv[idx], ">") == 0) {
 
          // Check for succeeded file name
          if (argv[idx + 1] != NULL) {
 
-            // Move redirect type and file name to new variables
-            redirect_type = strdup(argv[idx]);
-            file_name = strdup(argv[idx + 1]);
+            // Move redirect type and file name to redirect arguments vector
+            redir_argv[0] = strdup(argv[idx]);
+      	   redir_argv[1] = strdup(argv[idx + 1]);
             argv[idx] = NULL;
             argv[idx + 1] = NULL;
          }
@@ -64,24 +61,19 @@ char **parse_redirect(char** argv) {
 
       idx++;
    }
-
-   // Point redirect arguments to redirect type and file name
-   redirect_argv[0] = redirect_type;
-   redirect_argv[1] = file_name;
-   return redirect_argv;
 }
 
 
-void child(char** argv, char** redirect_argv) {
+void child(char** argv, char** redir_argv) {
    int fd_out, fd_in; 
-   
-   if (redirect_argv[0] != NULL) {
+   printf("%s\n", redir_argv[0]);
+   if (redir_argv[0] != NULL) {
          
       // Redirect output
-      if (strcmp(redirect_argv[0], ">") == 0) {
+      if (strcmp(redir_argv[0], ">") == 0) {
 
          // Get file description
-         fd_out = creat(redirect_argv[1], S_IRWXU);
+         fd_out = creat(redir_argv[1], S_IRWXU);
          if (fd_out == -1) {
             perror("Redirect output failed");
          }
@@ -93,16 +85,13 @@ void child(char** argv, char** redirect_argv) {
          if (close(fd_out) == -1) {
             perror("Closing output failed");
          }
-      
-         free(redirect_argv);
-
       }
 
       // Redirect input
-      else if (strcmp(redirect_argv[0], "<") == 0) {
+      else if (strcmp(redir_argv[0], "<") == 0) {
 
          // Get file description
-         fd_in = open(redirect_argv[1], O_RDONLY);
+         fd_in = open(redir_argv[1], O_RDONLY);
          if (fd_in == -1) {
             perror("Redirect input failed");
          }
@@ -114,8 +103,6 @@ void child(char** argv, char** redirect_argv) {
          if (close(fd_in) == -1) {
             perror("Closing input failed");
          }
-
-         free(redirect_argv);
       }
    }
 
@@ -141,6 +128,7 @@ void parent(pid_t child_pid, int wait) {
       // Parent waits for child process with PID to be terminated
       default: {
          waitpid(child_pid, &status, WUNTRACED);
+
          if (WIFEXITED(status)) {   
             printf("Child <%d> exited with status = %d.\n", child_pid, status);
          }
@@ -149,68 +137,61 @@ void parent(pid_t child_pid, int wait) {
    }
 }
 
-void add_history_feature(char *history[], int &history_count, char* user_input)
-{
-   // If history_count exceeds MAX_HISTORY
-   // overwrite the last command
+void add_history_feature(char *history[], int &history_count, char* user_input) {
+   // If history_count exceeds MAX_HISTORY, overwrite the last command
 
-   if (history_count < MAX_HISTORY)
-   {
+   if (history_count < MAX_HISTORY) {
       history[history_count++] = strdup(user_input);
    } 
-   else
-   {
-      free (history[0]);
-      for (int i = 1; i < MAX_HISTORY; i++)
+   else {
+      free(history[0]);
+      for (int i = 1; i < MAX_HISTORY; i++) {
          history[i - 1] = history[i];
+		}
       
       history[MAX_HISTORY - 1] = strdup(user_input);
    }
 }
 
+
 int main() {
    bool running = true;
    pid_t pid;
-   int status = 0, wait;
-   char **argv, **redirect_argv;
-   char *user_input;
-   char *history[MAX_HISTORY];
-   int history_count = 0;
+   int status = 0, history_count = 0, wait;
+   char user_input[MAX_LINE_LENGTH];
+   char *argv[BUF_SIZE], *redir_argv[REDIR_SIZE], *history[MAX_HISTORY];
 
    while (running) {
       printf("osh>");
       fflush(stdout);
-      
+  
       // Read and parse user input
       while (fgets(user_input, MAX_LINE_LENGTH, stdin) == NULL) {
          perror("Cannot read user input!");
          fflush(stdin);
       }
 
-
-      // Remove trailing endline character
+    	// Remove trailing endline character
       user_input[strcspn(user_input, "\n")] = '\0';
-
 
       // Check if user entered "exit"
       if (strcmp(user_input, "exit") == 0) {
          running = false;
          continue;
       }
-
+/*
       // Check if user entered "!!"
-      if (strcmp(user_input, "!!") == 0){
-         if (history_count == 0)
-            {
-               fprintf(stderr, "No commands in history\n");
+      if (strcmp(user_input, "!!") == 0) {
+         if (history_count == 0) {
+               perror("No commands in history");
                continue;
             }
          user_input = strdup(history[MAX_HISTORY - 1]);
       }
-
-      add_history_feature(history, history_count, user_input);
-      argv = parse_command(user_input, &wait);   
-      redirect_argv = parse_redirect(argv);
+*/
+      //add_history_feature(history, history_count, user_input);
+      parse_command(user_input, argv, &wait);
+		parse_redir(argv, redir_argv);
       
       // Fork child process
       pid_t pid = fork();
@@ -222,12 +203,11 @@ int main() {
             exit(EXIT_FAILURE);
       
          case 0:     // In child process
-            child(argv, redirect_argv);
+            child(argv, redir_argv);
             exit(EXIT_SUCCESS);
       
          default:    // In parent process
             parent(pid, wait);
-            free(argv);
       }
    }
    
