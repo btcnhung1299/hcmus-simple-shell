@@ -199,16 +199,16 @@ int main() {
       }
 
       // Check if user entered "!!"
-      if (strcmp(user_input, "!!") == 0){
-         if (history_count == 0)
-            {
-               fprintf(stderr, "No commands in history\n");
-               continue;
-            }
-         user_input = strdup(history[MAX_HISTORY - 1]);
-      }
+      // if (strcmp(user_input, "!!") == 0){
+      //    if (history_count == 0)
+      //       {
+      //          fprintf(stderr, "No commands in history\n");
+      //          continue;
+      //       }
+      //    user_input = strdup(history[MAX_HISTORY - 1]);
+      // }
 
-      add_history_feature(history, history_count, user_input);
+      // add_history_feature(history, history_count, user_input);
       argv = parse_command(user_input, &wait);   
       redirect_argv = parse_redirect(argv);
       
