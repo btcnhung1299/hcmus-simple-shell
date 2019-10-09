@@ -4,9 +4,12 @@
 #include <string.h>     // strtok(), strcmp(), strdup()
 #include <stdlib.h>     // free()
 #include <fcntl.h>      // open(), close()
+
 using namespace std;
 const int MAX_LINE_LENGTH = 200;
 const int BUF_SIZE = 100;
+const int MAX_COMMAND_NAME = 20;
+const int MAX_HISTORY = 30;
 
 char **parse_command(char *input, int *wait) {
    // Allocate new array for arguments
@@ -139,13 +142,33 @@ void parent(pid_t child_pid, int wait) {
       }
    }
 }
+void add_history_feature(char *history[], int &history_count, char* user_input)
+{
+   // If history_count exceeds MAX_HISTORY
+   // overwrite the last command
 
+   if (history_count < MAX_HISTORY)
+   {
+      history[history_count++] = strdup(user_input);
+   } 
+   else
+   {
+      free (history[0]);
+      for (int i = 1; i < MAX_HISTORY; i++)
+         history[i - 1] = history[i];
+      
+      history[MAX_HISTORY - 1] = strdup(user_input);
+   }
+}
 int main() {
    bool running = true;
    pid_t pid;
    int status = 0, wait;
    char **argv, **redirect_argv;
    char *user_input;
+   char *scr_file;
+   char *history[MAX_HISTORY];
+   int history_count = 0;
 
    while (running) {
       printf("osh>");
@@ -157,6 +180,7 @@ int main() {
          fflush(stdin);
       }
 
+
       // Remove trailing endline character
       user_input[strcspn(user_input, "\n")] = '\0';
 
@@ -166,9 +190,21 @@ int main() {
          continue;
       }
 
+      // Check if user entered "!!"
+      if (strcmp(user_input, "!!") == 0){
+         if (history_count == 0)
+            {
+               fprintf(stderr, "No commands in history\n");
+               continue;
+            }
+         user_input = strdup(history[MAX_HISTORY - 1]);
+      }
+
+      add_history_feature(history, history_count, user_input);
       argv = parse_command(user_input, &wait);   
       redirect_argv = parse_redirect(argv);
 
+      
       // Fork child process
       pid_t pid = fork();
 
