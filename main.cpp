@@ -10,6 +10,7 @@ const unsigned MAX_LINE_LENGTH = 100;
 const unsigned BUF_SIZE = 50;
 const unsigned REDIR_SIZE = 2;
 const unsigned MAX_HISTORY = 30;
+const unsigned MAX_COMMAND_NAME = 30;
 
 void parse_command(char input[], char* argv[], int* wait) {
 	for (unsigned idx = 0; idx < BUF_SIZE; idx++) {
@@ -142,15 +143,14 @@ void add_history_feature(char *history[], int &history_count, char* user_input) 
    // If history_count exceeds MAX_HISTORY, overwrite the last command
 
    if (history_count < MAX_HISTORY) {
-      history[history_count++] = strdup(user_input);
+      strcpy(history[history_count++], user_input);
    } 
    else {
       free(history[0]);
       for (int i = 1; i < MAX_HISTORY; i++) {
-         history[i - 1] = history[i];
+         strcpy(history[i - 1], history[i]);
 		}
-      
-      history[MAX_HISTORY - 1] = strdup(user_input);
+      strcpy(history[MAX_HISTORY - 1], user_input);
    }
 }
 
@@ -161,6 +161,9 @@ int main() {
    int status = 0, history_count = 0, wait;
    char user_input[MAX_LINE_LENGTH];
    char *argv[BUF_SIZE], *redir_argv[REDIR_SIZE], *history[MAX_HISTORY];
+
+   for (int i = 0; i < MAX_HISTORY; i++)
+		history[i] = (char*)malloc(MAX_COMMAND_NAME);
 
    while (running) {
       printf("osh>");
@@ -180,17 +183,19 @@ int main() {
          running = false;
          continue;
       }
-/*
+
       // Check if user entered "!!"
-      if (strcmp(user_input, "!!") == 0) {
-         if (history_count == 0) {
-               perror("No commands in history");
+      if (strcmp(user_input, "!!") == 0){
+         if (history_count == 0)
+            {
+               fprintf(stderr, "No commands in history\n");
                continue;
             }
-         user_input = strdup(history[MAX_HISTORY - 1]);
+         strcpy(user_input, history[history_count - 1]);
+         printf("osh>%s\n", user_input);
       }
-*/
-      //add_history_feature(history, history_count, user_input);
+
+      add_history_feature(history, history_count, user_input);
       parse_command(user_input, argv, &wait);
 		parse_redir(argv, redir_argv);
       
