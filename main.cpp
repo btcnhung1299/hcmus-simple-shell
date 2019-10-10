@@ -38,7 +38,6 @@ void parse_command(char input[], char* argv[], int* wait) {
    }
 
    argv[idx] = NULL;
-
 }
 
 void parse_redir(char* argv[], char* redir_argv[]) {
@@ -106,7 +105,6 @@ bool parse_pipe(char* argv[], char *child01_argv[], char *child02_argv[]) {
 
 void child(char* argv[], char* redir_argv[]) {
    int fd_out, fd_in;
-	printf("%s %s!\n", redir_argv[0], redir_argv[1]);
    if (redir_argv[0] != NULL) {
          
       // Redirect output
@@ -161,7 +159,6 @@ void child(char* argv[], char* redir_argv[]) {
 void parent(pid_t child_pid, int wait) {
    int status;
    printf("Parent <%d> spawned a child <%d>.\n", getpid(), child_pid);
-   
    switch (wait) {
 
       // Parent and child are running concurrently
@@ -251,8 +248,9 @@ int main() {
    char *argv[BUF_SIZE], *redir_argv[REDIR_SIZE], *child01_argv[PIPE_SIZE], 
    *child02_argv[PIPE_SIZE], *history[MAX_HISTORY];
 
-   for (int i = 0; i < MAX_HISTORY; i++)
+   for (int i = 0; i < MAX_HISTORY; i++) {
 		history[i] = (char*)malloc(MAX_COMMAND_NAME);
+   }
 
    while (running) {
       printf("osh>");
