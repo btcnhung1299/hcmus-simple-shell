@@ -66,10 +66,47 @@ void parse_redir(char* argv[], char* redir_argv[]) {
    }
 }
 
+bool parse_pipe(char* argv[], char *child01_argv[], char *child02_argv[]) {
+   unsigned idx = 0, split_idx = 0;
+   bool contains_pipe = false;
+   int cnt = 0;
+
+   while (argv[idx] != NULL) {
+
+      // Check if user_command contains pipe character |
+      if (strcmp(argv[idx], "|") == 0) {
+         split_idx = idx;
+         contains_pipe = true;
+      }
+    
+		idx++;
+   }
+
+	if (!contains_pipe) {
+		return false;
+	}
+   
+	// Copy arguments before split pipe position to child01_argv[]
+   for (idx = 0; idx < split_idx; idx++) {
+      child01_argv[idx] = strdup(argv[idx]);
+	}
+
+	child01_argv[idx++] = NULL;
+      
+	// Copy arguments after split pipe position to child02_argv[]
+   while (argv[idx] != NULL) {
+   	child02_argv[idx - split_idx - 1] = strdup(argv[idx]);
+		idx++;
+   }
+
+	child02_argv[idx - split_idx - 1] = NULL;
+
+	return true;
+}
 
 void child(char* argv[], char* redir_argv[]) {
    int fd_out, fd_in;
-
+	printf("%s %s!\n", redir_argv[0], redir_argv[1]);
    if (redir_argv[0] != NULL) {
          
       // Redirect output
@@ -79,6 +116,7 @@ void child(char* argv[], char* redir_argv[]) {
          fd_out = creat(redir_argv[1], S_IRWXU);
          if (fd_out == -1) {
             perror("Redirect output failed");
+				exit(EXIT_FAILURE);
          }
 
          // Replace stdout with output file
@@ -87,6 +125,7 @@ void child(char* argv[], char* redir_argv[]) {
          // Check for error on close
          if (close(fd_out) == -1) {
             perror("Closing output failed");
+				exit(EXIT_FAILURE);
          }
       }
 
@@ -97,6 +136,7 @@ void child(char* argv[], char* redir_argv[]) {
          fd_in = open(redir_argv[1], O_RDONLY);
          if (fd_in == -1) {
             perror("Redirect input failed");
+				exit(EXIT_FAILURE);
          }
 
          // Replace stdin with input from file
@@ -105,6 +145,7 @@ void child(char* argv[], char* redir_argv[]) {
          // Check for error on close
          if (close(fd_in) == -1) {
             perror("Closing input failed");
+				exit(EXIT_FAILURE);
          }
       }
    }
@@ -112,6 +153,7 @@ void child(char* argv[], char* redir_argv[]) {
    // Execute user command in child process
    if (execvp(argv[0], argv) == -1) {
       perror("Fail to execute command");
+		exit(EXIT_FAILURE);
    }
 }
 
@@ -151,59 +193,25 @@ void add_history_feature(char *history[], int &history_count, char* user_input) 
       for (int i = 1; i < MAX_HISTORY; i++) {
          strcpy(history[i - 1], history[i]);
 		}
+
       strcpy(history[MAX_HISTORY - 1], user_input);
    }
 }
-bool contain_pipe_character(char** argv, char *child01_argv[], char *child02_argv[]){
-   unsigned idx = 0;
-   int flag_pipe = 0;
-   int split = -1;
-   int cnt = 0;
 
-   while (argv[idx] != NULL){
-
-      // Check if user_command contains pipe character |
-      if (strcmp(argv[idx], "|") == 0){
-         split = idx;
-         flag_pipe = true;
-      }
-      idx++;
-   }
-
-   if (flag_pipe)
-   {
-      for (idx = 0; idx < split; idx++)
-         child01_argv[idx] = argv[idx];
-
-      idx = split + 1;
-      
-      while (argv[idx] != NULL)
-      {
-         child02_argv[cnt++] = argv[idx++];
-      }
-   }
-   
-   child01_argv[split] = NULL;
-   child02_argv[cnt] = NULL;
-
-   return flag_pipe;
-}
-void execWithPipe(char* child01_argv[], char* child02_argv[])
-{
+void exec_with_pipe(char* child01_argv[], char* child02_argv[]) {
 	int pipefd[2];
 
-	if (pipe(pipefd) == -1)
-	{  
+	if (pipe(pipefd) == -1) {  
       /* Create a pipe with 1 input and 1 output file descriptor
        Notation: Index = 0 ==> read pipe, Index = 1 ==> write pipe
       */
 		perror("pipe() failed");
-		return;
+		exit(EXIT_FAILURE);
 	}
 
    // Create 1st child   
-	if (fork() == 0)         
-	{
+	if (fork() == 0) {
+
       // Redirect STDOUT to output part of pipe 
 		dup2(pipefd[1], STDOUT_FILENO);       
 		close(pipefd[0]);     
@@ -211,12 +219,12 @@ void execWithPipe(char* child01_argv[], char* child02_argv[])
 
 		execvp(child01_argv[0], child01_argv);   
 		perror("Fail to execute first command");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
    // Create 2nd child
-	if (fork() == 0)   
-	{
+	if (fork() == 0) {
+
       // Redirect STDIN to input part of pipe
 		dup2(pipefd[0], STDIN_FILENO);            
 		close(pipefd[1]);      
@@ -224,7 +232,7 @@ void execWithPipe(char* child01_argv[], char* child02_argv[])
 
 		execvp(child02_argv[0], child02_argv);   
 		perror("Fail to execute second command");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	close(pipefd[0]);
@@ -266,12 +274,11 @@ int main() {
       }
 
       // Check if user entered "!!"
-      if (strcmp(user_input, "!!") == 0){
-         if (history_count == 0)
-            {
-               fprintf(stderr, "No commands in history\n");
-               continue;
-            }
+      if (strcmp(user_input, "!!") == 0) {
+         if (history_count == 0) {
+         	fprintf(stderr, "No commands in history\n");
+            continue;
+         }
          strcpy(user_input, history[history_count - 1]);
          printf("osh>%s\n", user_input);
       }
@@ -280,13 +287,12 @@ int main() {
       parse_command(user_input, argv, &wait);
 		parse_redir(argv, redir_argv);
       
-      if (contain_pipe_character(argv, child01_argv, child02_argv))
-      {
-         execWithPipe(child01_argv, child02_argv);
+      if (parse_pipe(argv, child01_argv, child02_argv)) {
+         exec_with_pipe(child01_argv, child02_argv);
+			continue;
       }
-      else
-      {
-         // Fork child process
+      
+      // Fork child process
       pid_t pid = fork();
 
       // Fork return twice on success: 0 - child process, > 0 - parent process
@@ -301,7 +307,6 @@ int main() {
       
          default:    // In parent process
             parent(pid, wait);
-         }
       }
       
    }
